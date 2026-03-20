@@ -1,0 +1,17 @@
+<html>
+  <head>
+    <title>Network Listener Test Page</title>
+  </head>
+  <body>
+    <h1>Network Test</h1>
+    <button id="fetch-btn" onclick="doFetch()">Fetch</button>
+    <div id="result"></div>
+    <script>
+      async function doFetch() {
+        const resp = await fetch('/');
+        const text = await resp.text();
+        document.getElementById('result').textContent = 'done';
+      }
+    </script>
+  </body>
+</html>
