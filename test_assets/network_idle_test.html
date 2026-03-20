@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Network Idle Test</title>
+</head>
+<body>
+  <h1>Network Idle Test</h1>
+  <div id="status">loading</div>
+  <script>
+    // Staggered fetches at 0ms, 200ms, 400ms to simulate network activity
+    const base = window.location.origin || 'http://localhost:8182';
+    let completed = 0;
+
+    function doFetch(delay) {
+      setTimeout(function() {
+        fetch(base + '/').then(function() {
+          completed++;
+          if (completed >= 3) {
+            document.getElementById('status').textContent = 'done';
+          }
+        });
+      }, delay);
+    }
+
+    doFetch(0);
+    doFetch(200);
+    doFetch(400);
+  </script>
+</body>
+</html>
