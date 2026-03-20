@@ -67,7 +67,7 @@ for f in $(find_targets); do
     -e 's|"src/chrobot/|"src/chrobot_extra/|g' \
     -e 's|"src/protocol"|"src/chrobot_extra/protocol"|g' \
     -e 's/import chrobot\//import chrobot_extra\//g' \
-    -e 's/import chrobot$/import chrobot_extra/g' \
+    -e 's/import chrobot\(\r\?\)$/import chrobot_extra\1/g' \
     -e 's/chrobot\./chrobot_extra./g' \
     -e 's|chrobot/install|chrobot_extra/install|g' \
     "$f"
