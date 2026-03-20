@@ -165,8 +165,8 @@ pub fn open(
       chrome.call(browser_subject, method, params, None, time_out)
     },
     url,
-    Some(1920),
-    Some(1080),
+    None,
+    None,
     None,
     None,
   ))
