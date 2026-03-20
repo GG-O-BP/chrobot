@@ -501,6 +501,14 @@ pub fn get_system_chrome_path() {
 
 // --- INITIALIZATION ---
 
+fn get_temp_user_data_dir() -> String {
+  let base = case os.family() {
+    os.WindowsNt -> "C:/tmp"
+    _ -> "/tmp"
+  }
+  base <> "/chrobot-ws-profile"
+}
+
 fn resolve_transport(mode: TransportMode) -> TransportMode {
   case mode {
     Auto ->
@@ -559,7 +567,13 @@ fn init_pipe(cfg: BrowserConfig, subject: Subject(Message)) {
 
 fn init_websocket(cfg: BrowserConfig, subject: Subject(Message)) {
   let cmd = cfg.path
-  let args = ["--remote-debugging-port=0", ..cfg.args]
+  let has_user_data_dir =
+    list.any(cfg.args, fn(arg) { string.starts_with(arg, "--user-data-dir") })
+  let extra_args = case has_user_data_dir {
+    True -> []
+    False -> ["--user-data-dir=" <> get_temp_user_data_dir()]
+  }
+  let args = list.flatten([["--remote-debugging-port=0"], extra_args, cfg.args])
   let port_res = open_browser_port_ws(cmd, args)
   case port_res {
     Ok(port) -> {
