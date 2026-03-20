@@ -1,0 +1,24 @@
+<html>
+  <head>
+    <title>Visibility Test Page</title>
+    <style>
+      #hidden-display { display: none; }
+      #hidden-visibility { visibility: hidden; }
+      #hidden-opacity { opacity: 0; }
+      #visible-element { color: red; }
+      #delayed-element { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="visible-element">I am visible</div>
+    <div id="hidden-display">Hidden by display</div>
+    <div id="hidden-visibility">Hidden by visibility</div>
+    <div id="hidden-opacity">Hidden by opacity</div>
+    <div id="delayed-element">I will appear later</div>
+    <script>
+      setTimeout(function() {
+        document.getElementById('delayed-element').style.display = 'block';
+      }, 200);
+    </script>
+  </body>
+</html>
