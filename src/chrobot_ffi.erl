@@ -1,6 +1,7 @@
 -module(chrobot_ffi).
 -include_lib("kernel/include/file.hrl").
--export([open_browser_port/2, send_to_port/2, get_arch/0, unzip/2, set_executable/1, run_command/1, get_time_ms/0, get_os_type/0]).
+-export([open_browser_port/2, send_to_port/2, get_arch/0, unzip/2, set_executable/1, run_command/1, get_time_ms/0, get_os_type/0,
+         open_browser_port_ws/2, wait_for_ws_url/2, gun_ws_connect/1, gun_ws_send/3, gun_ws_close/1, get_port_os_pid/1, kill_os_process/1]).
 
 % ---------------------------------------------------
 % RUNTIME
@@ -32,6 +33,103 @@ send_to_port(Port, BinaryString) ->
     catch
         error:Reason -> {error, Reason}
     end.
+
+% Open browser port for WebSocket mode.
+% Uses stderr_to_stdout so we can read the DevTools WS URL from stdout.
+open_browser_port_ws(Command, Args) ->
+    PortName = {spawn_executable, Command},
+    Options = [{args, Args}, binary, stderr_to_stdout, exit_status],
+    try erlang:open_port(PortName, Options) of
+        PortId ->
+            erlang:link(PortId),
+            {ok, PortId}
+    catch
+        error:Reason -> {error, Reason}
+    end.
+
+% Wait for Chrome to print its WebSocket URL on stderr (redirected to stdout).
+% Pattern: "DevTools listening on ws://..."
+wait_for_ws_url(Port, Timeout) ->
+    wait_for_ws_url_loop(Port, Timeout, <<>>).
+
+wait_for_ws_url_loop(Port, Timeout, Buffer) ->
+    receive
+        {Port, {data, Data}} ->
+            Combined = <<Buffer/binary, Data/binary>>,
+            case re:run(Combined, <<"DevTools listening on (ws://[^\\s\\r\\n]+)">>,
+                        [{capture, [1], binary}]) of
+                {match, [Url]} -> {ok, Url};
+                nomatch -> wait_for_ws_url_loop(Port, Timeout, Combined)
+            end;
+        {Port, {exit_status, _}} -> {error, browser_exited}
+    after Timeout -> {error, timeout}
+    end.
+
+% Connect to Chrome DevTools WebSocket endpoint using gun.
+gun_ws_connect(WsUrl) ->
+    {ok, _} = application:ensure_all_started(gun),
+    case uri_string:parse(WsUrl) of
+        #{host := Host, port := Port, path := Path} ->
+            HostStr = case is_binary(Host) of
+                true -> binary_to_list(Host);
+                false -> Host
+            end,
+            PathBin = case is_binary(Path) of
+                true -> Path;
+                false -> list_to_binary(Path)
+            end,
+            case gun:open(HostStr, Port, #{protocols => [http]}) of
+                {ok, ConnPid} ->
+                    case gun:await_up(ConnPid, 5000) of
+                        {ok, _} ->
+                            StreamRef = gun:ws_upgrade(ConnPid, PathBin, []),
+                            receive
+                                {gun_upgrade, ConnPid, StreamRef, [<<"websocket">>], _} ->
+                                    {ok, {ConnPid, StreamRef}};
+                                {gun_response, ConnPid, _, _, Status, _} ->
+                                    gun:close(ConnPid),
+                                    {error, {ws_upgrade_failed, Status}};
+                                {gun_error, ConnPid, StreamRef, Reason} ->
+                                    gun:close(ConnPid),
+                                    {error, Reason}
+                            after 5000 ->
+                                gun:close(ConnPid),
+                                {error, ws_upgrade_timeout}
+                            end;
+                        {error, Reason} ->
+                            gun:close(ConnPid),
+                            {error, Reason}
+                    end;
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        _ -> {error, invalid_url}
+    end.
+
+% Send a text frame via gun WebSocket.
+gun_ws_send(ConnPid, StreamRef, Data) ->
+    gun:ws_send(ConnPid, StreamRef, {text, Data}),
+    {ok, true}.
+
+% Close a gun connection.
+gun_ws_close(ConnPid) ->
+    gun:close(ConnPid),
+    nil.
+
+% Get the OS process ID of an Erlang port.
+get_port_os_pid(Port) ->
+    case erlang:port_info(Port, os_pid) of
+        {os_pid, Pid} -> {ok, Pid};
+        undefined -> {error, not_found}
+    end.
+
+% Kill an OS process by PID.
+kill_os_process(OsPid) ->
+    case os:type() of
+        {win32, _} -> os:cmd("taskkill /F /PID " ++ integer_to_list(OsPid));
+        _ -> os:cmd("kill -9 " ++ integer_to_list(OsPid))
+    end,
+    nil.
 
 % ---------------------------------------------------
 % INSTALLER

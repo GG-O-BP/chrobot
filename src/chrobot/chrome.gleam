@@ -1,16 +1,16 @@
-//// An actor that manages an instance of the chrome browser via an erlang port.
-//// The browser is started to allow remote debugging via pipes, once the pipe is disconnected,
-//// chrome should quit automatically.
-//// 
-//// All messages to the browser are sent through this actor to the port, and responses are returned to the sender.
+//// An actor that manages an instance of the chrome browser.
+//// Communication with Chrome uses either pipes (FD 3/4) or WebSocket,
+//// selected via the `TransportMode` in `BrowserConfig`.
+////
+//// All messages to the browser are sent through this actor, and responses are returned to the sender.
 //// The actor manages associating responses with the correct request by adding auto-incrementing ids to the requests,
 //// so callers don't need to worry about this.
-//// 
+////
 //// When the browser managed by this actor is closed, the actor will also exit.
-//// 
+////
 //// To start a browser, it's preferrable to use the launch functions from the root chrobot module,
 //// which perform additional checks and validations.
-//// 
+////
 
 import chrobot/internal/os
 import chrobot/internal/utils
@@ -48,17 +48,38 @@ pub type LogLevel {
   LogLevelDebug
 }
 
+/// The transport mode used to communicate with the Chrome browser.
+pub type TransportMode {
+  /// FD 3/4 pipe (default on non-Windows)
+  Pipe
+  /// WebSocket via --remote-debugging-port=0 (default on Windows)
+  WebSocket
+  /// Auto-detect based on OS (Pipe on Unix, WebSocket on Windows)
+  Auto
+}
+
 pub type BrowserConfig {
   BrowserConfig(
     path: String,
     args: List(String),
     start_timeout: Int,
     log_level: LogLevel,
+    transport: TransportMode,
   )
 }
 
-pub type BrowserInstance {
-  BrowserInstance(port: Port)
+type TransportHandle {
+  PipeHandle(port: Port)
+  WsHandle(
+    gun_pid: process.Pid,
+    stream_ref: d.Dynamic,
+    chrome_port: Port,
+    os_pid: Int,
+  )
+}
+
+pub opaque type BrowserInstance {
+  BrowserInstance(transport: TransportHandle)
 }
 
 pub type BrowserVersion {
@@ -181,13 +202,14 @@ pub fn launch() -> Result(Subject(Message), LaunchError) {
         args: get_default_chrome_args(),
         start_timeout: default_timeout,
         log_level: LogLevelWarnings,
+        transport: Auto,
       ))
     }
   }
 }
 
 /// Like [`launch`](#launch), but launches the browser with a visible window, not
-/// in headless mode, which is useful for debugging and development.  
+/// in headless mode, which is useful for debugging and development.
 pub fn launch_window() -> Result(Subject(Message), LaunchError) {
   case resolve_env_cofig() {
     Ok(env_config) -> {
@@ -206,6 +228,7 @@ pub fn launch_window() -> Result(Subject(Message), LaunchError) {
           }),
         start_timeout: env_config.start_timeout,
         log_level: env_config.log_level,
+        transport: env_config.transport,
       ))
     }
     Error(_) -> {
@@ -231,6 +254,7 @@ pub fn launch_window() -> Result(Subject(Message), LaunchError) {
           }),
         start_timeout: default_timeout,
         log_level: LogLevelWarnings,
+        transport: Auto,
       ))
     }
   }
@@ -477,36 +501,129 @@ pub fn get_system_chrome_path() {
 
 // --- INITIALIZATION ---
 
+fn resolve_transport(mode: TransportMode) -> TransportMode {
+  case mode {
+    Auto ->
+      case os.family() {
+        os.WindowsNt -> WebSocket
+        _ -> Pipe
+      }
+    other -> other
+  }
+}
+
 /// Returns a function that can be passed to the actor initialiser
 fn create_init_fn(cfg: BrowserConfig) {
   fn(subject: Subject(Message)) {
-    let cmd = cfg.path
-    let args = ["--remote-debugging-pipe", ..cfg.args]
-    let res = open_browser_port(cmd, args)
-    case res {
-      Ok(port) -> {
-        let instance = BrowserInstance(port)
-        let initial_state =
-          BrowserState(instance, 0, [], [], st.new(), None, cfg.log_level)
-        log_info(initial_state, "Port opened successfully, actor initialized")
+    let resolved = resolve_transport(cfg.transport)
+    case resolved {
+      Pipe -> init_pipe(cfg, subject)
+      WebSocket -> init_websocket(cfg, subject)
+      // Auto is already resolved above, but handle for exhaustiveness
+      Auto -> init_pipe(cfg, subject)
+    }
+  }
+}
 
-        // Create a selector for port messages AND the actor subject
-        // Both must be included when using actor.selecting()
-        let selector =
-          process.new_selector()
-          |> process.select_record(port, 1, map_port_message)
-          |> process.select(subject)
+fn init_pipe(cfg: BrowserConfig, subject: Subject(Message)) {
+  let cmd = cfg.path
+  let args = ["--remote-debugging-pipe", ..cfg.args]
+  let res = open_browser_port(cmd, args)
+  case res {
+    Ok(port) -> {
+      let instance = BrowserInstance(transport: PipeHandle(port))
+      let initial_state =
+        BrowserState(instance, 0, [], [], st.new(), None, cfg.log_level)
+      log_info(
+        initial_state,
+        "Port opened successfully (pipe), actor initialized",
+      )
 
-        actor.initialised(initial_state)
-        |> actor.selecting(selector)
-        |> actor.returning(subject)
-        |> Ok
+      let selector =
+        process.new_selector()
+        |> process.select_record(port, 1, map_port_message)
+        |> process.select(subject)
+
+      actor.initialised(initial_state)
+      |> actor.selecting(selector)
+      |> actor.returning(subject)
+      |> Ok
+    }
+    Error(err) -> {
+      utils.err("Browser failed to start!")
+      io.println("Error: " <> string.inspect(err))
+      Error("Browser did not start")
+    }
+  }
+}
+
+fn init_websocket(cfg: BrowserConfig, subject: Subject(Message)) {
+  let cmd = cfg.path
+  let args = ["--remote-debugging-port=0", ..cfg.args]
+  let port_res = open_browser_port_ws(cmd, args)
+  case port_res {
+    Ok(port) -> {
+      case wait_for_ws_url(port, cfg.start_timeout) {
+        Ok(ws_url) -> {
+          case gun_ws_connect(ws_url) {
+            Ok(#(gun_pid, stream_ref)) -> {
+              let os_pid_val = case get_port_os_pid(port) {
+                Ok(pid) -> pid
+                Error(_) -> 0
+              }
+              let instance =
+                BrowserInstance(transport: WsHandle(
+                  gun_pid,
+                  stream_ref,
+                  port,
+                  os_pid_val,
+                ))
+              let initial_state =
+                BrowserState(instance, 0, [], [], st.new(), None, cfg.log_level)
+              log_info(
+                initial_state,
+                "WebSocket connected to " <> ws_url <> ", actor initialized",
+              )
+
+              // Select gun_ws frames, gun_down events, port exit, and actor messages
+              let selector =
+                process.new_selector()
+                |> process.select_record(
+                  atom.create("gun_ws"),
+                  3,
+                  map_gun_ws_message,
+                )
+                |> process.select_record(
+                  atom.create("gun_down"),
+                  4,
+                  map_gun_down_message,
+                )
+                |> process.select_record(port, 1, map_port_message)
+                |> process.select(subject)
+
+              actor.initialised(initial_state)
+              |> actor.selecting(selector)
+              |> actor.returning(subject)
+              |> Ok
+            }
+            Error(err) -> {
+              utils.err("WebSocket connection to Chrome failed!")
+              io.println("Error: " <> string.inspect(err))
+              Error("WebSocket connection failed")
+            }
+          }
+        }
+        Error(err) -> {
+          utils.err("Failed to get WebSocket URL from Chrome stderr!")
+          io.println("Error: " <> string.inspect(err))
+          Error("Failed to parse WebSocket URL")
+        }
       }
-      Error(err) -> {
-        utils.err("Browser failed to start!")
-        io.println("Error: " <> string.inspect(err))
-        Error("Browser did not start")
-      }
+    }
+    Error(err) -> {
+      utils.err("Browser failed to start!")
+      io.println("Error: " <> string.inspect(err))
+      Error("Browser did not start")
     }
   }
 }
@@ -522,6 +639,21 @@ fn map_port_message(message: d.Dynamic) -> Message {
     Ok(data) -> PortResponse(data)
     Error(_) -> map_non_data_port_msg(message)
   }
+}
+
+/// Map a gun_ws message to a WsResponse
+/// gun_ws messages arrive as {gun_ws, ConnPid, StreamRef, {text, Data}}
+fn map_gun_ws_message(message: d.Dynamic) -> Message {
+  case decode.run(message, decode.at([3, 1], decode.string)) {
+    Ok(data) -> WsResponse(data)
+    Error(_) -> UnexpectedPortMessage(message)
+  }
+}
+
+/// Map a gun_down message to WsDown
+/// gun_down messages arrive as {gun_down, ConnPid, Protocol, Reason, KilledStreams}
+fn map_gun_down_message(message: d.Dynamic) -> Message {
+  WsDown(message)
 }
 
 /// Handle a message from the port that is not a data message.
@@ -631,6 +763,10 @@ pub type Message {
   SetLogLevel(LogLevel)
   /// (From Port) Port has exited
   PortExit(Int)
+  /// (From WebSocket) Complete JSON message from gun
+  WsResponse(String)
+  /// (From WebSocket) gun connection down
+  WsDown(d.Dynamic)
 }
 
 type PendingRequest {
@@ -645,6 +781,14 @@ fn loop(state: BrowserState, message: Message) {
         state,
         "Received kill signal, actor is shutting down, this is unuasual and means the browser did not respond to a shutdown request in time!",
       )
+      // For WebSocket mode, force-kill the browser process
+      case state.instance.transport {
+        WsHandle(gun_pid, _, _, os_pid) -> {
+          kill_os_process(os_pid)
+          ws_close(gun_pid)
+        }
+        PipeHandle(_) -> Nil
+      }
       actor.stop()
     }
     Call(client, method, params, session_id) -> {
@@ -731,11 +875,16 @@ fn loop(state: BrowserState, message: Message) {
     }
     PortExit(exit_status) -> {
       // The browser has exited
+      // Clean up WebSocket connection if applicable
+      case state.instance.transport {
+        WsHandle(gun_pid, _, _, _) -> ws_close(gun_pid)
+        PipeHandle(_) -> Nil
+      }
       case state.shutdown_request {
         Some(client) -> {
           log_info(
             state,
-            "Browser exited after shtudown request, actor is shutting down",
+            "Browser exited after shutdown request, actor is shutting down",
           )
           process.send(client, Nil)
           actor.stop()
@@ -748,6 +897,40 @@ fn loop(state: BrowserState, message: Message) {
               <> " browser actor is shutting down abnormally",
           )
           actor.stop_abnormal("browser exited abnormally")
+        }
+      }
+    }
+    WsResponse(data) -> {
+      // WebSocket messages are complete JSON frames, no buffering needed
+      log_debug(state, fn() { "WS Received: " <> data })
+      let updated_state = handle_port_response(state, data)
+      actor.continue(BrowserState(
+        instance: updated_state.instance,
+        next_id: updated_state.next_id,
+        unanswered_requests: updated_state.unanswered_requests,
+        event_listeners: updated_state.event_listeners,
+        message_buffer: updated_state.message_buffer,
+        shutdown_request: updated_state.shutdown_request,
+        log_level: state.log_level,
+      ))
+    }
+    WsDown(_reason) -> {
+      // WebSocket connection dropped, treat like PortExit
+      case state.shutdown_request {
+        Some(client) -> {
+          log_info(
+            state,
+            "WebSocket disconnected after shutdown request, actor is shutting down",
+          )
+          process.send(client, Nil)
+          actor.stop()
+        }
+        _ -> {
+          log_warn(
+            state,
+            "WebSocket disconnected unexpectedly, actor is shutting down abnormally",
+          )
+          actor.stop_abnormal("websocket disconnected abnormally")
         }
       }
     }
@@ -1036,14 +1219,16 @@ fn handle_port_response(state: BrowserState, response: String) -> BrowserState {
 
 // --- HELPERS ---
 
-/// Send a JSON encoded string to the browser instance,
-/// the JSON payload must already include the `id` field.
-/// This function appends a null byte to the end of the message,
-/// which is used by the browser to detect when a message ends.
+/// Send a JSON encoded string to the browser instance.
+/// For pipe mode, appends a null byte delimiter.
+/// For WebSocket mode, sends as a complete text frame.
 fn send_to_browser(state: BrowserState, data: Json) {
   let payload = json.to_string(data)
   log_debug(state, fn() { "Sending Payload: " <> payload })
-  send_to_port(state.instance.port, payload <> "\u{0000}")
+  case state.instance.transport {
+    PipeHandle(port) -> send_to_port(port, payload <> "\u{0000}")
+    WsHandle(gun_pid, stream_ref, ..) -> ws_send(gun_pid, stream_ref, payload)
+  }
 }
 
 fn get_first_existing_path(paths: List(String)) -> Result(String, LaunchError) {
@@ -1083,11 +1268,21 @@ pub fn resolve_env_cofig() -> Result(BrowserConfig, Nil) {
     Error(Nil) -> LogLevelWarnings
   }
 
+  let transport = case envoy.get("CHROBOT_TRANSPORT") {
+    Ok("pipe") -> Pipe
+    Ok("websocket") -> WebSocket
+    Ok("ws") -> WebSocket
+    Ok("auto") -> Auto
+    Ok(_) -> Auto
+    Error(Nil) -> Auto
+  }
+
   Ok(BrowserConfig(
     path: path,
     args: args,
     start_timeout: time_out,
     log_level: log_level,
+    transport: transport,
   ))
 }
 
@@ -1142,3 +1337,33 @@ fn open_browser_port(
 
 @external(erlang, "chrobot_ffi", "send_to_port")
 fn send_to_port(port: Port, message: String) -> Result(d.Dynamic, d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "open_browser_port_ws")
+fn open_browser_port_ws(
+  command: String,
+  args: List(String),
+) -> Result(Port, d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "wait_for_ws_url")
+fn wait_for_ws_url(port: Port, timeout: Int) -> Result(String, d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "gun_ws_connect")
+fn gun_ws_connect(
+  ws_url: String,
+) -> Result(#(process.Pid, d.Dynamic), d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "gun_ws_send")
+fn ws_send(
+  conn_pid: process.Pid,
+  stream_ref: d.Dynamic,
+  data: String,
+) -> Result(d.Dynamic, d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "gun_ws_close")
+fn ws_close(conn_pid: process.Pid) -> Nil
+
+@external(erlang, "chrobot_ffi", "get_port_os_pid")
+fn get_port_os_pid(port: Port) -> Result(Int, d.Dynamic)
+
+@external(erlang, "chrobot_ffi", "kill_os_process")
+fn kill_os_process(os_pid: Int) -> Nil

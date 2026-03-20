@@ -392,6 +392,7 @@ pub fn launch_with_config_test() {
       args: chrome.get_default_chrome_args(),
       start_timeout: 5000,
       log_level: chrome.LogLevelWarnings,
+      transport: chrome.Auto,
     )
   let browser_subject = should.be_ok(chrome.launch_with_config(config))
   should.be_ok(chrome.get_version(browser_subject))
@@ -407,6 +408,7 @@ pub fn handle_protocol_error_test() {
       args: chrome.get_default_chrome_args(),
       start_timeout: 5000,
       log_level: chrome.LogLevelWarnings,
+      transport: chrome.Auto,
     )
   let browser_subject = should.be_ok(chrome.launch_with_config(config))
   let invalid_payload =
@@ -447,6 +449,7 @@ pub fn handle_protocol_error_2_test() {
       args: chrome.get_default_chrome_args(),
       start_timeout: 5000,
       log_level: chrome.LogLevelWarnings,
+      transport: chrome.Auto,
     )
   let browser_subject = should.be_ok(chrome.launch_with_config(config))
 
