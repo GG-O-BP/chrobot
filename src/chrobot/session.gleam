@@ -221,10 +221,7 @@ fn encode_storage_entry(entry: StorageEntry) -> json.Json {
 
 fn decode_session_state() -> decode.Decoder(SessionState) {
   use cookies <- decode.field("cookies", decode.list(network.decode__cookie()))
-  use origins <- decode.field(
-    "origins",
-    decode.list(decode_origin_storage()),
-  )
+  use origins <- decode.field("origins", decode.list(decode_origin_storage()))
   decode.success(SessionState(cookies: cookies, origins: origins))
 }
 

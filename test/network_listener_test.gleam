@@ -10,7 +10,8 @@ pub fn network_listener_start_stop_test() {
   let browser = test_utils.get_browser_instance()
   use <- chrobot.defer_quit(browser)
 
-  let assert Ok(page) = chrobot.open(browser, mock_server.get_url(), 10_000)
+  let assert Ok(page) =
+    chrobot.open(browser, mock_server.get_url(), 10_000)
 
   let listener = network_listener.start(page) |> should.be_ok()
   network_listener.stop(listener)
@@ -21,7 +22,8 @@ pub fn network_listener_defer_stop_test() {
   let browser = test_utils.get_browser_instance()
   use <- chrobot.defer_quit(browser)
 
-  let assert Ok(page) = chrobot.open(browser, mock_server.get_url(), 10_000)
+  let assert Ok(page) =
+    chrobot.open(browser, mock_server.get_url(), 10_000)
   let assert Ok(listener) = network_listener.start(page)
   use <- network_listener.defer_stop(listener)
 

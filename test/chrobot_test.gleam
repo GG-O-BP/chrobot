@@ -75,7 +75,8 @@ pub fn create_page_test() {
   let browser = test_utils.get_browser_instance()
   use <- chrobot.defer_quit(browser)
   let reference_html = test_utils.get_reference_html()
-  let page = should.be_ok(chrobot.create_page(browser, reference_html, 10_000))
+  let page =
+    should.be_ok(chrobot.create_page(browser, reference_html, 10_000))
 
   chrobot.get_all_html(page)
   |> should.be_ok()

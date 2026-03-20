@@ -71,7 +71,11 @@ pub fn save_restore_cookie_test() {
 pub fn save_to_file_load_from_file_test() {
   let browser = test_utils.get_browser_instance()
   let assert Ok(page) =
-    chrobot.create_page(browser, "<html><body>file test</body></html>", 10_000)
+    chrobot.create_page(
+      browser,
+      "<html><body>file test</body></html>",
+      10_000,
+    )
 
   // Set a cookie
   should.be_ok(chrobot.eval(
@@ -139,7 +143,10 @@ pub fn restore_storage_test() {
 
   // Verify localStorage was restored
   let result =
-    chrobot.eval_to_value(on: page2, js: "localStorage.getItem('storageKey')")
+    chrobot.eval_to_value(
+      on: page2,
+      js: "localStorage.getItem('storageKey')",
+    )
     |> result.try(fn(ro) { chrobot.as_value(Ok(ro), decode.string) })
   should.equal(should.be_ok(result), "storageValue")
 

@@ -25,7 +25,9 @@ pub opaque type IdleListener {
 
 /// Start tracking network activity on the given page.
 /// Enables the Network domain and subscribes to request start/finish/fail events.
-pub fn start(page: chrobot.Page) -> Result(IdleListener, chrome.RequestError) {
+pub fn start(
+  page: chrobot.Page,
+) -> Result(IdleListener, chrome.RequestError) {
   use _ <- result.try(network.enable(
     chrobot.page_caller(page),
     max_post_data_size: option.None,

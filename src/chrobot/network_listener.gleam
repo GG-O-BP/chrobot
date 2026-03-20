@@ -34,7 +34,9 @@ pub opaque type NetworkListener {
 }
 
 /// Network 도메인 활성화 + responseReceived 이벤트 리스너 등록
-pub fn start(page: chrobot.Page) -> Result(NetworkListener, chrome.RequestError) {
+pub fn start(
+  page: chrobot.Page,
+) -> Result(NetworkListener, chrome.RequestError) {
   use _ <- result.try(network.enable(
     chrobot.page_caller(page),
     max_post_data_size: option.None,

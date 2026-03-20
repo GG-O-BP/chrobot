@@ -40,7 +40,8 @@ pub fn get_browser_instance() {
 pub fn with_reference_page(apply fun) {
   let browser = get_browser_instance()
   let reference_html = get_reference_html()
-  let assert Ok(page) = chrobot.create_page(browser, reference_html, 10_000)
+  let assert Ok(page) =
+    chrobot.create_page(browser, reference_html, 10_000)
   should.be_ok(chrobot.await_selector(page, "body"))
   fun(page)
   chrobot.quit(browser)
