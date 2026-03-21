@@ -17,6 +17,7 @@ import chrobot/protocol/runtime
 import chrobot/protocol/security
 import gleam/dict
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option
@@ -1823,7 +1824,10 @@ pub fn decode__cookie() {
     use value <- decode.field("value", decode.string)
     use domain <- decode.field("domain", decode.string)
     use path <- decode.field("path", decode.string)
-    use expires <- decode.field("expires", decode.float)
+    use expires <- decode.field(
+      "expires",
+      decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]),
+    )
     use size <- decode.field("size", decode.int)
     use http_only <- decode.field("httpOnly", decode.bool)
     use secure <- decode.field("secure", decode.bool)
