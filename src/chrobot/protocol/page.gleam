@@ -16,6 +16,7 @@ import chrobot/protocol/dom
 import chrobot/protocol/network
 import chrobot/protocol/runtime
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 import gleam/result
@@ -433,17 +434,17 @@ pub fn encode__visual_viewport(value__: VisualViewport) {
 @internal
 pub fn decode__visual_viewport() {
   {
-    use offset_x <- decode.field("offsetX", decode.float)
-    use offset_y <- decode.field("offsetY", decode.float)
-    use page_x <- decode.field("pageX", decode.float)
-    use page_y <- decode.field("pageY", decode.float)
-    use client_width <- decode.field("clientWidth", decode.float)
-    use client_height <- decode.field("clientHeight", decode.float)
-    use scale <- decode.field("scale", decode.float)
+    use offset_x <- decode.field("offsetX", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use offset_y <- decode.field("offsetY", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use page_x <- decode.field("pageX", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use page_y <- decode.field("pageY", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use client_width <- decode.field("clientWidth", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use client_height <- decode.field("clientHeight", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use scale <- decode.field("scale", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use zoom <- decode.optional_field(
       "zoom",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
 
     decode.success(VisualViewport(
@@ -489,11 +490,11 @@ pub fn encode__viewport(value__: Viewport) {
 @internal
 pub fn decode__viewport() {
   {
-    use x <- decode.field("x", decode.float)
-    use y <- decode.field("y", decode.float)
-    use width <- decode.field("width", decode.float)
-    use height <- decode.field("height", decode.float)
-    use scale <- decode.field("scale", decode.float)
+    use x <- decode.field("x", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use y <- decode.field("y", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use width <- decode.field("width", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use height <- decode.field("height", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use scale <- decode.field("scale", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(Viewport(
       x: x,

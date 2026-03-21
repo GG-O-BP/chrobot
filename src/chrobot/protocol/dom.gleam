@@ -21,6 +21,7 @@ import chrobot/internal/utils
 import chrobot/protocol/runtime
 import gleam/dynamic
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 import gleam/result
@@ -713,7 +714,7 @@ pub fn decode__rgba() {
     use a <- decode.optional_field(
       "a",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
 
     decode.success(RGBA(r: r, g: g, b: b, a: a))
@@ -735,7 +736,7 @@ pub fn encode__quad(value__: Quad) {
 @internal
 pub fn decode__quad() {
   {
-    use value__ <- decode.then(decode.list(decode.float))
+    use value__ <- decode.then(decode.list(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])))
     decode.success(Quad(value__))
   }
 }
@@ -875,10 +876,10 @@ pub fn encode__rect(value__: Rect) {
 @internal
 pub fn decode__rect() {
   {
-    use x <- decode.field("x", decode.float)
-    use y <- decode.field("y", decode.float)
-    use width <- decode.field("width", decode.float)
-    use height <- decode.field("height", decode.float)
+    use x <- decode.field("x", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use y <- decode.field("y", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use width <- decode.field("width", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use height <- decode.field("height", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(Rect(x: x, y: y, width: width, height: height))
   }

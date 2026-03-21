@@ -14,6 +14,7 @@ import chrobot/chrome
 import chrobot/internal/utils
 import chrobot/protocol/runtime
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 import gleam/result
@@ -137,8 +138,8 @@ pub fn encode__profile(value__: Profile) {
 pub fn decode__profile() {
   {
     use nodes <- decode.field("nodes", decode.list(decode__profile_node()))
-    use start_time <- decode.field("startTime", decode.float)
-    use end_time <- decode.field("endTime", decode.float)
+    use start_time <- decode.field("startTime", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use end_time <- decode.field("endTime", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use samples <- decode.optional_field(
       "samples",
       option.None,
@@ -329,7 +330,7 @@ pub type StartPreciseCoverageResponse {
 @internal
 pub fn decode__start_precise_coverage_response() {
   {
-    use timestamp <- decode.field("timestamp", decode.float)
+    use timestamp <- decode.field("timestamp", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(StartPreciseCoverageResponse(timestamp: timestamp))
   }
@@ -368,7 +369,7 @@ pub type TakePreciseCoverageResponse {
 pub fn decode__take_precise_coverage_response() {
   {
     use result <- decode.field("result", decode.list(decode__script_coverage()))
-    use timestamp <- decode.field("timestamp", decode.float)
+    use timestamp <- decode.field("timestamp", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(TakePreciseCoverageResponse(
       result: result,

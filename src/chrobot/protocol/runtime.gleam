@@ -19,6 +19,7 @@ import chrobot/internal/utils
 import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option
@@ -967,7 +968,7 @@ pub fn encode__timestamp(value__: Timestamp) {
 @internal
 pub fn decode__timestamp() {
   {
-    use value__ <- decode.then(decode.float)
+    use value__ <- decode.then(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     decode.success(Timestamp(value__))
   }
 }
@@ -987,7 +988,7 @@ pub fn encode__time_delta(value__: TimeDelta) {
 @internal
 pub fn decode__time_delta() {
   {
-    use value__ <- decode.then(decode.float)
+    use value__ <- decode.then(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     decode.success(TimeDelta(value__))
   }
 }

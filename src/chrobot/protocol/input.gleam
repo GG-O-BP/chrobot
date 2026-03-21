@@ -12,6 +12,7 @@
 
 import chrobot/internal/utils
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 
@@ -73,42 +74,42 @@ pub fn encode__touch_point(value__: TouchPoint) {
 @internal
 pub fn decode__touch_point() {
   {
-    use x <- decode.field("x", decode.float)
-    use y <- decode.field("y", decode.float)
+    use x <- decode.field("x", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use y <- decode.field("y", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use radius_x <- decode.optional_field(
       "radiusX",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use radius_y <- decode.optional_field(
       "radiusY",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use rotation_angle <- decode.optional_field(
       "rotationAngle",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use force <- decode.optional_field(
       "force",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use tilt_x <- decode.optional_field(
       "tiltX",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use tilt_y <- decode.optional_field(
       "tiltY",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use id <- decode.optional_field(
       "id",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
 
     decode.success(TouchPoint(
@@ -178,7 +179,7 @@ pub fn encode__time_since_epoch(value__: TimeSinceEpoch) {
 @internal
 pub fn decode__time_since_epoch() {
   {
-    use value__ <- decode.then(decode.float)
+    use value__ <- decode.then(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     decode.success(TimeSinceEpoch(value__))
   }
 }

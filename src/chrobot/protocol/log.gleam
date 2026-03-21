@@ -14,6 +14,7 @@ import chrobot/internal/utils
 import chrobot/protocol/network
 import chrobot/protocol/runtime
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 
@@ -322,7 +323,7 @@ pub fn encode__violation_setting(value__: ViolationSetting) {
 pub fn decode__violation_setting() {
   {
     use name <- decode.field("name", decode__violation_setting_name())
-    use threshold <- decode.field("threshold", decode.float)
+    use threshold <- decode.field("threshold", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(ViolationSetting(name: name, threshold: threshold))
   }

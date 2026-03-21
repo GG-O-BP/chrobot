@@ -15,6 +15,7 @@ import chrobot/chrome
 import chrobot/internal/utils
 import chrobot/protocol/runtime
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 import gleam/result
@@ -313,7 +314,7 @@ pub fn encode__search_match(value__: SearchMatch) {
 @internal
 pub fn decode__search_match() {
   {
-    use line_number <- decode.field("lineNumber", decode.float)
+    use line_number <- decode.field("lineNumber", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use line_content <- decode.field("lineContent", decode.string)
 
     decode.success(SearchMatch(

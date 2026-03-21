@@ -236,7 +236,7 @@ pub fn encode__time_since_epoch(value__: TimeSinceEpoch) {
 @internal
 pub fn decode__time_since_epoch() {
   {
-    use value__ <- decode.then(decode.float)
+    use value__ <- decode.then(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     decode.success(TimeSinceEpoch(value__))
   }
 }
@@ -256,7 +256,7 @@ pub fn encode__monotonic_time(value__: MonotonicTime) {
 @internal
 pub fn decode__monotonic_time() {
   {
-    use value__ <- decode.then(decode.float)
+    use value__ <- decode.then(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     decode.success(MonotonicTime(value__))
   }
 }
@@ -415,18 +415,18 @@ pub fn encode__resource_timing(value__: ResourceTiming) {
 @internal
 pub fn decode__resource_timing() {
   {
-    use request_time <- decode.field("requestTime", decode.float)
-    use proxy_start <- decode.field("proxyStart", decode.float)
-    use proxy_end <- decode.field("proxyEnd", decode.float)
-    use dns_start <- decode.field("dnsStart", decode.float)
-    use dns_end <- decode.field("dnsEnd", decode.float)
-    use connect_start <- decode.field("connectStart", decode.float)
-    use connect_end <- decode.field("connectEnd", decode.float)
-    use ssl_start <- decode.field("sslStart", decode.float)
-    use ssl_end <- decode.field("sslEnd", decode.float)
-    use send_start <- decode.field("sendStart", decode.float)
-    use send_end <- decode.field("sendEnd", decode.float)
-    use receive_headers_end <- decode.field("receiveHeadersEnd", decode.float)
+    use request_time <- decode.field("requestTime", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use proxy_start <- decode.field("proxyStart", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use proxy_end <- decode.field("proxyEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use dns_start <- decode.field("dnsStart", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use dns_end <- decode.field("dnsEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use connect_start <- decode.field("connectStart", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use connect_end <- decode.field("connectEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use ssl_start <- decode.field("sslStart", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use ssl_end <- decode.field("sslEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use send_start <- decode.field("sendStart", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use send_end <- decode.field("sendEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
+    use receive_headers_end <- decode.field("receiveHeadersEnd", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(ResourceTiming(
       request_time: request_time,
@@ -704,7 +704,7 @@ pub fn decode__signed_certificate_timestamp() {
     use origin <- decode.field("origin", decode.string)
     use log_description <- decode.field("logDescription", decode.string)
     use log_id <- decode.field("logId", decode.string)
-    use timestamp <- decode.field("timestamp", decode.float)
+    use timestamp <- decode.field("timestamp", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use hash_algorithm <- decode.field("hashAlgorithm", decode.string)
     use signature_algorithm <- decode.field("signatureAlgorithm", decode.string)
     use signature_data <- decode.field("signatureData", decode.string)
@@ -1369,7 +1369,7 @@ pub fn decode__response() {
       decode.optional(decode__headers()),
     )
     use connection_reused <- decode.field("connectionReused", decode.bool)
-    use connection_id <- decode.field("connectionId", decode.float)
+    use connection_id <- decode.field("connectionId", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use remote_ip_address <- decode.optional_field(
       "remoteIPAddress",
       option.None,
@@ -1400,7 +1400,7 @@ pub fn decode__response() {
       option.None,
       decode.optional(decode.bool),
     )
-    use encoded_data_length <- decode.field("encodedDataLength", decode.float)
+    use encoded_data_length <- decode.field("encodedDataLength", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use timing <- decode.optional_field(
       "timing",
       option.None,
@@ -1585,7 +1585,7 @@ pub fn encode__web_socket_frame(value__: WebSocketFrame) {
 @internal
 pub fn decode__web_socket_frame() {
   {
-    use opcode <- decode.field("opcode", decode.float)
+    use opcode <- decode.field("opcode", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
     use mask <- decode.field("mask", decode.bool)
     use payload_data <- decode.field("payloadData", decode.string)
 
@@ -1635,7 +1635,7 @@ pub fn decode__cached_resource() {
       option.None,
       decode.optional(decode__response()),
     )
-    use body_size <- decode.field("bodySize", decode.float)
+    use body_size <- decode.field("bodySize", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(CachedResource(
       url: url,
@@ -1747,12 +1747,12 @@ pub fn decode__initiator() {
     use line_number <- decode.optional_field(
       "lineNumber",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use column_number <- decode.optional_field(
       "columnNumber",
       option.None,
-      decode.optional(decode.float),
+      decode.optional(decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])),
     )
     use request_id <- decode.optional_field(
       "requestId",

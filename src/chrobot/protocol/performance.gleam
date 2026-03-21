@@ -13,6 +13,7 @@
 import chrobot/chrome
 import chrobot/internal/utils
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/option
 import gleam/result
@@ -39,7 +40,7 @@ pub fn encode__metric(value__: Metric) {
 pub fn decode__metric() {
   {
     use name <- decode.field("name", decode.string)
-    use value <- decode.field("value", decode.float)
+    use value <- decode.field("value", decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)]))
 
     decode.success(Metric(name: name, value: value))
   }
