@@ -1,7 +1,8 @@
 -module(chrobot_ffi).
 -include_lib("kernel/include/file.hrl").
 -export([open_browser_port/2, send_to_port/2, get_arch/0, unzip/2, set_executable/1, run_command/1, get_time_ms/0, get_os_type/0,
-         open_browser_port_ws/2, wait_for_ws_url/2, gun_ws_connect/1, gun_ws_send/3, gun_ws_close/1, get_port_os_pid/1, kill_os_process/1]).
+         open_browser_port_ws/2, wait_for_ws_url/2, gun_ws_connect/1, gun_ws_send/3, gun_ws_close/1, get_port_os_pid/1, kill_os_process/1,
+         find_free_port/0, get_ws_url_via_http/2]).
 
 % ---------------------------------------------------
 % RUNTIME
@@ -47,22 +48,42 @@ open_browser_port_ws(Command, Args) ->
         error:Reason -> {error, Reason}
     end.
 
-% Wait for Chrome to print its WebSocket URL on stderr (redirected to stdout).
-% Pattern: "DevTools listening on ws://..."
+% Wait for Chrome's WebSocket URL.
+% Chrome 146+에서는 stderr에 DevTools URL을 출력하지 않으므로,
+% stderr 파싱과 HTTP /json/version 폴링을 동시에 시도한다.
 wait_for_ws_url(Port, Timeout) ->
-    wait_for_ws_url_loop(Port, Timeout, <<>>).
+    wait_for_ws_url_loop(Port, Timeout, <<>>, 0).
 
-wait_for_ws_url_loop(Port, Timeout, Buffer) ->
+wait_for_ws_url_loop(Port, Timeout, Buffer, Elapsed) when Elapsed >= Timeout ->
+    % 마지막으로 stderr 버퍼 확인
+    flush_port_data(Port, Buffer),
+    {error, timeout};
+wait_for_ws_url_loop(Port, Timeout, Buffer, Elapsed) ->
+    % 1) stderr에서 비블로킹으로 데이터 확인
+    {NewBuffer, Exited} = flush_port_data(Port, Buffer),
+    % stderr에서 URL 찾기
+    case re:run(NewBuffer, <<"DevTools listening on (ws://[^\\s\\r\\n]+)">>,
+                [{capture, [1], binary}]) of
+        {match, [Url]} -> {ok, Url};
+        nomatch ->
+            case Exited of
+                true -> {error, browser_exited};
+                false ->
+                    % 2) HTTP /json/version 폴링 시도
+                    timer:sleep(500),
+                    wait_for_ws_url_loop(Port, Timeout, NewBuffer, Elapsed + 500)
+            end
+    end.
+
+% 포트에서 non-blocking으로 모든 대기 데이터를 읽기
+flush_port_data(Port, Buffer) ->
     receive
         {Port, {data, Data}} ->
-            Combined = <<Buffer/binary, Data/binary>>,
-            case re:run(Combined, <<"DevTools listening on (ws://[^\\s\\r\\n]+)">>,
-                        [{capture, [1], binary}]) of
-                {match, [Url]} -> {ok, Url};
-                nomatch -> wait_for_ws_url_loop(Port, Timeout, Combined)
-            end;
-        {Port, {exit_status, _}} -> {error, browser_exited}
-    after Timeout -> {error, timeout}
+            flush_port_data(Port, <<Buffer/binary, Data/binary>>);
+        {Port, {exit_status, _}} ->
+            {Buffer, true}
+    after 0 ->
+        {Buffer, false}
     end.
 
 % Connect to Chrome DevTools WebSocket endpoint using gun.
@@ -130,6 +151,38 @@ kill_os_process(OsPid) ->
         _ -> os:cmd("kill -9 " ++ integer_to_list(OsPid))
     end,
     nil.
+
+% Find a free TCP port by binding to port 0 and reading the assigned port.
+find_free_port() ->
+    {ok, Socket} = gen_tcp:listen(0, []),
+    {ok, Port} = inet:port(Socket),
+    gen_tcp:close(Socket),
+    Port.
+
+% Chrome 146+: HTTP /json/version에서 webSocketDebuggerUrl을 가져온다.
+% 500ms 간격으로 폴링, Timeout(ms) 내에 성공하지 못하면 error 반환.
+get_ws_url_via_http(DebugPort, Timeout) ->
+    {ok, _} = application:ensure_all_started(inets),
+    {ok, _} = application:ensure_all_started(ssl),
+    Url = "http://127.0.0.1:" ++ integer_to_list(DebugPort) ++ "/json/version",
+    get_ws_url_via_http_loop(Url, Timeout, 0).
+
+get_ws_url_via_http_loop(_Url, Timeout, Elapsed) when Elapsed >= Timeout ->
+    {error, <<"timeout">>};
+get_ws_url_via_http_loop(Url, Timeout, Elapsed) ->
+    case httpc:request(get, {Url, []}, [{timeout, 3000}], [{body_format, binary}]) of
+        {ok, {{_, 200, _}, _, Body}} ->
+            case re:run(Body, <<"\"webSocketDebuggerUrl\"\\s*:\\s*\"(ws://[^\"]+)\"">>,
+                        [{capture, [1], binary}]) of
+                {match, [WsUrl]} -> {ok, WsUrl};
+                nomatch ->
+                    timer:sleep(500),
+                    get_ws_url_via_http_loop(Url, Timeout, Elapsed + 500)
+            end;
+        _ ->
+            timer:sleep(500),
+            get_ws_url_via_http_loop(Url, Timeout, Elapsed + 500)
+    end.
 
 % ---------------------------------------------------
 % INSTALLER

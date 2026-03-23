@@ -47,83 +47,74 @@ fn align(content: String) {
   string.replace(content, "\n", "\n            ")
 }
 
+fn is_silent() -> Bool {
+  case envoy.get("CHROBOT_LOG_LEVEL") {
+    Ok("silent") -> True
+    _ -> False
+  }
+}
+
 pub fn err(content: String) {
-  case term_supports_color() {
-    True -> {
-      {
-        "[-_-] ERR! "
-        |> ansi.bg_red()
-        |> ansi.white()
-        |> ansi.bold()
-        <> " "
-        <> align(content)
-        |> ansi.red()
+  case is_silent() {
+    True -> Nil
+    False ->
+      case term_supports_color() {
+        True ->
+          io.println(
+            { "[-_-] ERR! " |> ansi.bg_red() |> ansi.white() |> ansi.bold() }
+            <> " "
+            <> { align(content) |> ansi.red() },
+          )
+        False -> io.println("[-_-] ERR! " <> content)
       }
-      |> io.println()
-    }
-    False -> {
-      io.println("[-_-] ERR! " <> content)
-    }
   }
 }
 
 pub fn warn(content: String) {
-  case term_supports_color() {
-    True -> {
-      {
-        "[O_O] HEY! "
-        |> ansi.bg_yellow()
-        |> ansi.black()
-        |> ansi.bold()
-        <> " "
-        <> align(content)
-        |> ansi.yellow()
+  case is_silent() {
+    True -> Nil
+    False ->
+      case term_supports_color() {
+        True ->
+          io.println(
+            { "[-_-] HEY! " |> ansi.bg_yellow() |> ansi.black() |> ansi.bold() }
+            <> " "
+            <> { align(content) |> ansi.yellow() },
+          )
+        False -> io.println("[O_O] HEY! " <> content)
       }
-      |> io.println()
-    }
-    False -> {
-      io.println("[O_O] HEY! " <> content)
-    }
   }
 }
 
 pub fn hint(content: String) {
-  case term_supports_color() {
-    True -> {
-      {
-        "[>‿0] HINT "
-        |> ansi.bg_cyan()
-        |> ansi.black()
-        |> ansi.bold()
-        <> " "
-        <> align(content)
-        |> ansi.cyan()
+  case is_silent() {
+    True -> Nil
+    False ->
+      case term_supports_color() {
+        True ->
+          io.println(
+            { "[>‿0] HINT " |> ansi.bg_cyan() |> ansi.black() |> ansi.bold() }
+            <> " "
+            <> { align(content) |> ansi.cyan() },
+          )
+        False -> io.println("[>‿0] HINT " <> content)
       }
-      |> io.println()
-    }
-    False -> {
-      io.println("[>‿0] HINT " <> content)
-    }
   }
 }
 
 pub fn info(content: String) {
-  case term_supports_color() {
-    True -> {
-      {
-        "[0‿0] INFO "
-        |> ansi.bg_white()
-        |> ansi.black()
-        |> ansi.bold()
-        <> " "
-        <> align(content)
-        |> ansi.white()
+  case is_silent() {
+    True -> Nil
+    False ->
+      case term_supports_color() {
+        True ->
+          io.println(
+            { "[0‿0] INFO " |> ansi.bg_white() |> ansi.black() |> ansi.bold() }
+            <> " "
+            <> { align(content) |> ansi.white() },
+          )
+        False -> io.println("[0‿0] INFO " <> content)
       }
-      |> io.println()
-    }
-    False -> {
-      io.println("[0‿0] INFO " <> content)
-    }
   }
 }
 

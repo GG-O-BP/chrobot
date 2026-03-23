@@ -158,7 +158,7 @@ pub fn launch_with_config(
   case launch_result {
     Ok(started) -> Ok(started.data)
     Error(err) -> {
-      io.println("Failed to start browser: " <> string.inspect(err))
+      log_println("Failed to start browser: " <> string.inspect(err))
       Error(FailedToStart)
     }
   }
@@ -559,7 +559,7 @@ fn init_pipe(cfg: BrowserConfig, subject: Subject(Message)) {
     }
     Error(err) -> {
       utils.err("Browser failed to start!")
-      io.println("Error: " <> string.inspect(err))
+      log_println("Error: " <> string.inspect(err))
       Error("Browser did not start")
     }
   }
@@ -573,11 +573,26 @@ fn init_websocket(cfg: BrowserConfig, subject: Subject(Message)) {
     True -> []
     False -> ["--user-data-dir=" <> get_temp_user_data_dir()]
   }
-  let args = list.flatten([["--remote-debugging-port=0"], extra_args, cfg.args])
+  // Chrome 146+: stderr에 DevTools URL을 출력하지 않으므로 고정 포트 사용
+  let debug_port = find_free_port()
+  let port_str = int.to_string(debug_port)
+  let args =
+    list.flatten([
+      ["--remote-debugging-port=" <> port_str],
+      extra_args,
+      cfg.args,
+    ])
   let port_res = open_browser_port_ws(cmd, args)
   case port_res {
     Ok(port) -> {
-      case wait_for_ws_url(port, cfg.start_timeout) {
+      // Chrome 146+: stderr에 DevTools URL을 출력하지 않으므로 HTTP 폴링 필요
+      // stderr 500ms만 시도 후 즉시 HTTP fallback (actor 타임아웃 내에 완료해야 함)
+      let ws_url_result = case wait_for_ws_url(port, 500) {
+        Ok(url) -> Ok(url)
+        Error(_) ->
+          get_ws_url_from_http(debug_port, cfg.start_timeout - 2000)
+      }
+      case ws_url_result {
         Ok(ws_url) -> {
           case gun_ws_connect(ws_url) {
             Ok(#(gun_pid, stream_ref)) -> {
@@ -622,21 +637,21 @@ fn init_websocket(cfg: BrowserConfig, subject: Subject(Message)) {
             }
             Error(err) -> {
               utils.err("WebSocket connection to Chrome failed!")
-              io.println("Error: " <> string.inspect(err))
+              log_println("Error: " <> string.inspect(err))
               Error("WebSocket connection failed")
             }
           }
         }
         Error(err) -> {
           utils.err("Failed to get WebSocket URL from Chrome stderr!")
-          io.println("Error: " <> string.inspect(err))
+          log_println("Error: " <> string.inspect(err))
           Error("Failed to parse WebSocket URL")
         }
       }
     }
     Error(err) -> {
       utils.err("Browser failed to start!")
-      io.println("Error: " <> string.inspect(err))
+      log_println("Error: " <> string.inspect(err))
       Error("Browser did not start")
     }
   }
@@ -1340,6 +1355,14 @@ fn map_call_error(err: utils.CallError) -> RequestError {
   }
 }
 
+/// CHROBOT_LOG_LEVEL=silent이면 출력하지 않는 io.println 래퍼
+fn log_println(msg: String) -> Nil {
+  case envoy.get("CHROBOT_LOG_LEVEL") {
+    Ok("silent") -> Nil
+    _ -> io.println(msg)
+  }
+}
+
 // --- EXTERNALS ---
 // Gleam does not support working with ports directly yet so we need to use FFI
 
@@ -1381,3 +1404,12 @@ fn get_port_os_pid(port: Port) -> Result(Int, d.Dynamic)
 
 @external(erlang, "chrobot_ffi", "kill_os_process")
 fn kill_os_process(os_pid: Int) -> Nil
+
+@external(erlang, "chrobot_ffi", "find_free_port")
+fn find_free_port() -> Int
+
+@external(erlang, "chrobot_ffi", "get_ws_url_via_http")
+fn get_ws_url_from_http(
+  debug_port: Int,
+  timeout: Int,
+) -> Result(String, d.Dynamic)
